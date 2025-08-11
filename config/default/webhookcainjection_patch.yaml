@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
 # This patch add annotation to admission webhook config and
 # the variables $(CERTIFICATE_NAMESPACE) and $(CERTIFICATE_NAME) will be substituted by kustomize.
 apiVersion: admissionregistration.k8s.io/v1
