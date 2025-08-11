@@ -1,0 +1,12 @@
+# build artifacts
+/build/
+/testbin/
+
+# custom configuration files used during development
+/*.yaml
+/*.yml
+/*.json
+/*.envrc
+/*.env
+!Makefile.maker.yaml
+!.golangci.yaml

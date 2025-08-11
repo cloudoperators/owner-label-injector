@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: owner-label-injector-config
+data:
+  config.yaml: |
+    rules:
+    - helmReleaseName: ".*"
+      helmReleaseNamespace: "kubernikus"
+      supportGroup: containers

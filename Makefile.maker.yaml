@@ -1,0 +1,85 @@
+# Configuration file for <https://github.com/sapcc/go-makefile-maker>
+
+metadata:
+  url: https://github.com/cloudoperators/owner-label-injector
+
+binaries:
+  - name:        labeller
+    fromPackage: ./labeller
+    installTo:   bin/
+  - name:        manager
+    fromPackage: .
+    installTo:   bin/
+
+golang:
+  autoupdateableDeps: ^github.com/(?:sapcc|sap-cloud-infrastructure)/
+  setGoModVersion: true
+
+golangciLint:
+  createConfig: true
+
+githubWorkflow:
+  ci:
+    enabled: true
+    ignorePaths: [ "**.md" ] # all Markdown files
+  license:
+    enabled: true
+  securityChecks:
+    enabled: true
+
+renovate:
+  enabled: true
+  assignees:
+    - I551482
+
+reuse:
+  annotations:
+    - paths:
+      - config/**/*.yaml
+      - e2e/test-chart/**/*
+      - PROJECT
+      SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
+      SPDX-License-Identifier: Apache-2.0
+
+controllerGen:
+  crdOutputPath: config/crd/bases
+  objectHeaderFile: hack/boilerplate.go.txt
+  rbacRoleName: manager-role
+
+verbatim: |
+  KUSTOMIZE_VERSION ?= 5.4.3
+  install-setup-kustomize: FORCE
+    @if ! hash kustomize 2>/dev/null; then printf "\e[1;36m>> Installing kustomize...\e[0m\n"; curl -s https://raw.githubusercontent.com/kubernetes-sigs/kustomize/master/hack/install_kustomize.sh | bash -s -- $(KUSTOMIZE_VERSION) $$(go env GOPATH)/bin; fi
+
+  ifndef ignore-not-found
+    ignore-not-found = false
+  endif
+
+  .PHONY: install
+  # Install CRDs into the K8s cluster specified in ~/.kube/config.
+  install-crd: manifests kustomize
+    $(KUSTOMIZE) build config/crd | kubectl apply -f -
+
+  .PHONY: uninstall
+  # Uninstall CRDs from the K8s cluster specified in ~/.kube/config.
+  # Call with ignore-not-found=true to ignore resource not found errors during deletion.
+  uninstall-crd: manifests kustomize
+    $(KUSTOMIZE) build config/crd | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+
+  .PHONY: deploy
+  # Deploy controller to the K8s cluster specified in ~/.kube/config.
+  deploy: manifests kustomize
+    cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+    $(KUSTOMIZE) build config/default | kubectl apply -f -
+
+  .PHONY: print
+  # Deploy controller to the K8s cluster specified in ~/.kube/config.
+  print: manifests kustomize
+    cd config/manager && $(KUSTOMIZE) edit set image controller=${IMG}
+    $(KUSTOMIZE) build config/default
+
+  .PHONY: undeploy
+  # Undeploy controller from the K8s cluster specified in ~/.kube/config.
+  # Call with ignore-not-found=true to ignore resource not found errors during deletion.
+  undeploy:
+    $(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
