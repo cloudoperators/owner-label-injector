@@ -1,0 +1,35 @@
+# SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
+# SPDX-License-Identifier: Apache-2.0
+
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: labeller
+spec:
+  schedule: "0 */6 * * *"
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          containers:
+          - command:
+            - /labeller
+            args:
+            - --config=/owner-label-injector-config/config.yaml
+            image: controller:latest
+            name: labeller
+            securityContext:
+              allowPrivilegeEscalation: false
+              capabilities:
+                drop:
+                  - "ALL"
+            volumeMounts:
+            - name: owner-label-injector-config
+              mountPath: /owner-label-injector-config
+          restartPolicy: OnFailure
+          volumes:
+          - name: owner-label-injector-config
+            configMap:
+              name: owner-label-injector-config
+          serviceAccountName: controller-manager
+          terminationGracePeriodSeconds: 10
