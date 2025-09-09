@@ -19,6 +19,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 )
 
 // +kubebuilder:webhook:path=/mutate-generic,mutating=true,failurePolicy=ignore,groups="*",resources="*",verbs=create;update,sideEffects=NoneOnDryRun,versions="*",admissionReviewVersions=v1,name=owner-label-injector.generic.ccloud
@@ -27,7 +29,7 @@ import (
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=list;get;watch
 
 type GenericLabeller struct {
-	Config  *OwnerLabelInjectorConfig
+	Config  *config.Global
 	Client  client.Client
 	Decoder admission.Decoder
 	Logger  logr.Logger
@@ -43,7 +45,7 @@ func (a *GenericLabeller) Handle(ctx context.Context, req admission.Request) adm
 		return admission.Errored(http.StatusBadRequest, errors.Wrap(err, "Error during decoding the incoming object"))
 	}
 
-	currentOwnerDataFound, currentOwnerData := GetOwnerDataFromLabels(object.GetLabels())
+	currentOwnerDataFound, currentOwnerData := GetOwnerDataFromLabels(object.GetLabels(), a.Config)
 
 	ownerData, found, err := UpwardTraverseGetOwnerData(ctx, a.Client, a.Config, req.Namespace, object, false)
 	if err != nil {
@@ -58,11 +60,11 @@ func (a *GenericLabeller) Handle(ctx context.Context, req admission.Request) adm
 	if currentLabels == nil {
 		currentLabels = make(map[string]string, 0)
 	}
-	maps.Copy(currentLabels, ownerData.Labels())
+	maps.Copy(currentLabels, ownerData.Labels(a.Config))
 	object.SetLabels(currentLabels)
 
 	// Check for generated resources like pods in workload API
-	object, workloadAPIChanged, err := WorkloadAPILabeller(object, ownerData)
+	object, workloadAPIChanged, err := WorkloadAPILabeller(object, ownerData, a.Config)
 	if err != nil {
 		log.Error(err, "error during workload API labelling")
 		return admission.Allowed(fmt.Sprintf("No owner-labels are injected. Error occurred workload API labelling: %v", err))
@@ -79,9 +81,9 @@ func (a *GenericLabeller) Handle(ctx context.Context, req admission.Request) adm
 	// Set annotation for the datasource
 	currentAnnotations := object.GetAnnotations()
 	if currentAnnotations != nil {
-		currentAnnotations[AnnotationSupportGroupDataSource] = ownerData.DataSource
+		currentAnnotations[a.Config.Labels.DataSourceAnnotation()] = ownerData.DataSource
 	} else {
-		currentAnnotations = map[string]string{AnnotationSupportGroupDataSource: ownerData.DataSource}
+		currentAnnotations = map[string]string{a.Config.Labels.DataSourceAnnotation(): ownerData.DataSource}
 	}
 	object.SetAnnotations(currentAnnotations)
 
@@ -100,15 +102,15 @@ type OwnerData struct {
 	DataSource   string
 }
 
-func (o OwnerData) Labels() map[string]string {
+func (o OwnerData) Labels(cfg *config.Global) map[string]string {
 	labels := make(map[string]string, 0)
 
 	if o.SupportGroup != "" {
-		labels[LabelSupportGroup] = o.SupportGroup
+		labels[cfg.Labels.SupportGroupKey()] = o.SupportGroup
 	}
 
 	if o.Service != "" {
-		labels[LabelService] = o.Service
+		labels[cfg.Labels.ServiceKey()] = o.Service
 	}
 
 	return labels

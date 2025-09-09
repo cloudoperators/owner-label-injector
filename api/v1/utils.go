@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -44,35 +45,25 @@ func IsManagedByHelm(labels, annotations map[string]string) (isManagedByHelm boo
 	return true, release, releaseNamespace
 }
 
-const LabelPrefix = "ccloud"
-const LabelSupportGroup = LabelPrefix + "/" + "support-group"
-const LabelService = LabelPrefix + "/" + "service"
-
-const AnnotationSupportGroupDataSource = LabelPrefix + "/" + "support-group-datasource"
-
-func GetOwnerDataFromLabels(labels map[string]string) (bool, OwnerData) {
-	supportGroup, ok := labels[LabelSupportGroup]
+func GetOwnerDataFromLabels(labels map[string]string, cfg *config.Global) (bool, OwnerData) {
+	supportGroup, ok := labels[cfg.Labels.SupportGroupKey()]
 	if !ok {
 		return false, OwnerData{}
 	}
 
-	return true, OwnerData{SupportGroup: supportGroup, Service: labels[LabelService]}
+	return true, OwnerData{SupportGroup: supportGroup, Service: labels[cfg.Labels.ServiceKey()]}
 }
 
-const OwnerConfigmapPrefix = "owner-of-"
-const OwnerConfigmapFallbackPrefix = "early-owner-of-"
-const OwnerConfigmapDataServiceKey = "service"
-const OwnerConfigmapDataSupportGroup = "support-group"
 const OwnerConfigmapDatasource = "owner-info"
 
-func GetOwnerDataFromOwnerConfigmap(c client.Client, releaseName, releaseNamespace string) (OwnerData, bool, error) {
+func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, releaseName, releaseNamespace string) (OwnerData, bool, error) {
 	cm := &corev1.ConfigMap{}
-	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: OwnerConfigmapPrefix + releaseName}, cm)
+	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapPrefix + releaseName}, cm)
 
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// try the configmap deployed with helm hooks
-			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: OwnerConfigmapFallbackPrefix + releaseName}, cm)
+			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapFallbackPrefix + releaseName}, cm)
 			if k8serrors.IsNotFound(err) {
 				return OwnerData{}, false, nil
 			}
@@ -81,8 +72,8 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, releaseName, releaseNamespa
 		return OwnerData{}, false, err
 	}
 
-	supportGroup, supportGroupOK := cm.Data[OwnerConfigmapDataSupportGroup]
-	service := cm.Data[OwnerConfigmapDataServiceKey]
+	supportGroup, supportGroupOK := cm.Data[cfg.Helm.SupportGroupDataKey]
+	service := cm.Data[cfg.Helm.ServiceDataKey]
 
 	if !supportGroupOK {
 		return OwnerData{}, false, errors.New("missing data in owner configmap")
@@ -91,7 +82,7 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, releaseName, releaseNamespa
 	return OwnerData{Service: service, SupportGroup: supportGroup, DataSource: OwnerConfigmapDatasource}, true, nil
 }
 
-func WorkloadAPILabeller(object *unstructured.Unstructured, ownerData OwnerData) (*unstructured.Unstructured, bool, error) {
+func WorkloadAPILabeller(object *unstructured.Unstructured, ownerData OwnerData, cfg *config.Global) (*unstructured.Unstructured, bool, error) {
 	// If there is an owner, skip it
 	ownerReferences := object.GetOwnerReferences()
 	if len(ownerReferences) > 0 {
@@ -130,10 +121,10 @@ func WorkloadAPILabeller(object *unstructured.Unstructured, ownerData OwnerData)
 
 		// if labels are found add owner data labels
 		if podTemplateLabelsFound {
-			maps.Copy(podSpecTemplateLabels, ownerData.Labels())
+			maps.Copy(podSpecTemplateLabels, ownerData.Labels(cfg))
 			err = unstructured.SetNestedStringMap(object.Object, podSpecTemplateLabels, locationBuilder...)
 		} else { // else inject labels if there is not any before
-			err = unstructured.SetNestedStringMap(object.Object, ownerData.Labels(), locationBuilder...)
+			err = unstructured.SetNestedStringMap(object.Object, ownerData.Labels(cfg), locationBuilder...)
 		}
 		return object, true, err
 	}
@@ -141,13 +132,13 @@ func WorkloadAPILabeller(object *unstructured.Unstructured, ownerData OwnerData)
 	return object, false, nil
 }
 
-func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, fallbackConfig *OwnerLabelInjectorConfig, namespace string, object *unstructured.Unstructured, forceCheck bool) (OwnerData, bool, error) {
+func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cfg *config.Global, namespace string, object *unstructured.Unstructured, forceCheck bool) (OwnerData, bool, error) {
 	annotations := object.GetAnnotations()
 	labels := object.GetLabels()
 	ownerReferences := object.GetOwnerReferences()
 
 	// (1) check if it has owner labels itself
-	found, ownerData := GetOwnerDataFromLabels(labels)
+	found, ownerData := GetOwnerDataFromLabels(labels, cfg)
 	if found && !forceCheck {
 		return ownerData, true, nil
 	}
@@ -157,17 +148,22 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, fa
 
 	// if it is managed by helm, check for its owner-info chart
 	if managedByHelm {
-		ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, release, releaseNamespace)
+		ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, cfg, release, releaseNamespace)
 		if found {
 			return ownerDataFromOwnerConfigmap, true, nil
 		}
 		if err != nil {
 			return ownerDataFromOwnerConfigmap, false, err
 		}
-		if fallbackConfig != nil {
-			found, ownerDataFromFallback := fallbackConfig.Check(release, releaseNamespace)
+		// Check static rules from environment variables.
+		if len(cfg.StaticRules.Rules) > 0 {
+			found, staticMatch := cfg.StaticRules.Check(release, releaseNamespace)
 			if found {
-				return ownerDataFromFallback, true, nil
+				return OwnerData{
+					SupportGroup: staticMatch.SupportGroup,
+					Service:      staticMatch.Service,
+					DataSource:   staticMatch.DataSource,
+				}, true, nil
 			}
 		}
 	}
@@ -184,8 +180,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, fa
 
 		// SPECIAL CASE 1: TLS certs
 		// annotation: vice-president/claimed-by-ingress
-		if annotations != nil && annotations["vice-president/claimed-by-ingress"] != "" {
-			ingress := annotations["vice-president/claimed-by-ingress"]
+		if annotations != nil && annotations[cfg.Traversal.VicePresidentAnnotationKey] != "" {
+			ingress := annotations[cfg.Traversal.VicePresidentAnnotationKey]
 			ingressData := strings.Split(ingress, "/")
 
 			if len(ingressData) == 2 {
@@ -197,9 +193,9 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, fa
 		}
 
 		// SPECIAL CASE 2: early-owner-info-owner-of-X configmap
-		if strings.HasPrefix(object.GetName(), OwnerConfigmapFallbackPrefix) && object.GetKind() == "ConfigMap" {
-			release := strings.TrimPrefix(object.GetName(), OwnerConfigmapFallbackPrefix)
-			ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, release, namespace)
+		if strings.HasPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix) && object.GetKind() == "ConfigMap" {
+			release := strings.TrimPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix)
+			ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, cfg, release, namespace)
 			if found {
 				return ownerDataFromOwnerConfigmap, true, nil
 			}
@@ -278,5 +274,5 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, fa
 		return ownerData, false, err
 	}
 
-	return UpwardTraverseGetOwnerData(ctx, k8sClient, fallbackConfig, ownerNamespace, owner, forceCheck)
+	return UpwardTraverseGetOwnerData(ctx, k8sClient, cfg, ownerNamespace, owner, forceCheck)
 }

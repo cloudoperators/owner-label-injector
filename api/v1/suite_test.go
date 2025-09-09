@@ -15,6 +15,7 @@ import (
 	. "github.com/onsi/gomega"
 
 	v1 "github.com/cloudoperators/owner-label-injector/api/v1"
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +36,7 @@ var (
 	k8sClient      client.Client
 	k8sManager     ctrl.Manager
 	stopController context.CancelFunc
+	testConfig     *config.Global
 )
 
 func TestRotation(t *testing.T) {
@@ -108,10 +110,36 @@ var _ = BeforeSuite(func() {
 	}
 	Expect(rule.Validate()).To(Succeed())
 
-	labeller := v1.GenericLabeller{
-		Config: &v1.OwnerLabelInjectorConfig{
-			Rules: []v1.Rule{rule},
+	testConfig = &config.Global{
+		Labels: config.Labels{
+			Prefix:                     "ccloud",
+			SupportGroupSuffix:         "support-group",
+			ServiceSuffix:              "service",
+			DataSourceAnnotationSuffix: "support-group-datasource",
 		},
+		Helm: config.Helm{
+			OwnerConfigMapPrefix:         "owner-of-",
+			OwnerConfigMapFallbackPrefix: "early-owner-of-",
+			SupportGroupDataKey:          "supportGroup",
+			ServiceDataKey:               "service",
+		},
+		StaticRules: config.StaticRules{
+			Rules: []config.StaticRule{
+				{
+					HelmReleaseName:      "static-release",
+					HelmReleaseNamespace: metav1.NamespaceDefault,
+					SupportGroup:         "static-group",
+					Service:              "static-service",
+				},
+			},
+		},
+		Traversal: config.Traversal{
+			VicePresidentAnnotationKey: "vice-president/claimed-by-ingress",
+		},
+	}
+
+	labeller := v1.GenericLabeller{
+		Config:  testConfig,
 		Client:  k8sClient,
 		Logger:  GinkgoLogr,
 		Decoder: admission.NewDecoder(scheme.Scheme),

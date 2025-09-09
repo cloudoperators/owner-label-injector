@@ -15,6 +15,7 @@ import (
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	v1 "github.com/cloudoperators/owner-label-injector/api/v1"
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -42,8 +43,6 @@ func init() {
 func main() {
 	var metricsAddr string
 	var probeAddr string
-	var configFile string
-	flag.StringVar(&configFile, "config", "", "Owner label injector configuration")
 	flag.StringVar(&metricsAddr, "metrics-bind-address", ":8080", "The address the metric endpoint binds to.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
 	opts := zap.Options{
@@ -53,17 +52,6 @@ func main() {
 	flag.Parse()
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	// Config
-	config := &v1.OwnerLabelInjectorConfig{}
-	if configFile != "" {
-		var err error
-		config, err = v1.NewConfig(configFile)
-		if err != nil {
-			setupLog.Error(err, "unable to parse config")
-			os.Exit(1)
-		}
-	}
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
@@ -77,7 +65,7 @@ func main() {
 
 	labeller := &v1.GenericLabeller{
 		Client:  mgr.GetClient(),
-		Config:  config,
+		Config:  config.Get(),
 		Logger:  ctrl.Log.WithName("generic"),
 		Decoder: admission.NewDecoder(scheme),
 	}

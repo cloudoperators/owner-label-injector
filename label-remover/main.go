@@ -29,7 +29,7 @@ import (
 	"k8s.io/client-go/dynamic"
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	v1 "github.com/cloudoperators/owner-label-injector/api/v1"
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
@@ -271,14 +271,15 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, gvr sche
 		// clean labels
 		currentLabels := newResource.GetLabels()
 		fmt.Printf("%s labels before: %+v \n", logHeader, currentLabels)
-		// delete(currentLabels, v1.LABEL_SERVICE)
-		delete(currentLabels, v1.LabelSupportGroup)
+		globalConfig := config.Get()
+		// delete(currentLabels, globalConfig.Labels.ServiceKey())
+		delete(currentLabels, globalConfig.Labels.SupportGroupKey())
 		newResource.SetLabels(currentLabels)
 		fmt.Printf("%s labels after: %+v \n", logHeader, currentLabels)
 
 		// clean annotation
 		currentAnnotations := resource.GetAnnotations()
-		delete(currentAnnotations, v1.AnnotationSupportGroupDataSource)
+		delete(currentAnnotations, globalConfig.Labels.DataSourceAnnotation())
 		newResource.SetAnnotations(currentAnnotations)
 
 		if DryRun {
@@ -348,7 +349,8 @@ func GetResourcesDynamically(ctx context.Context, dynamicInt dynamic.Interface, 
 func GetResourcesWithSpecificLabel(ctx context.Context, dynamicInt dynamic.Interface, gvr schema.GroupVersionResource, namespace string) ([]unstructured.Unstructured, error) {
 	listOptions := metav1.ListOptions{}
 	if SupportGroupToBeRemoved != "" {
-		labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{v1.LabelSupportGroup: SupportGroupToBeRemoved}}
+		globalConfig := config.Get()
+		labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{globalConfig.Labels.SupportGroupKey(): SupportGroupToBeRemoved}}
 		listOptions.LabelSelector = labels.Set(labelSelector.MatchLabels).String()
 	}
 
