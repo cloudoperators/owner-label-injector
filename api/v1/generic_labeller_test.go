@@ -13,6 +13,7 @@ import (
 	apiV1 "github.com/cloudoperators/owner-label-injector/api/v1"
 
 	appsv1 "k8s.io/api/apps/v1"
+
 	corev1 "k8s.io/api/core/v1"
 	networkingv1 "k8s.io/api/networking/v1"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -41,8 +42,8 @@ var _ = Describe("The webhook", Ordered, func() {
 
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&staticSecret), &result)).To(Succeed())
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "static-group"))
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelService, "static-service"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "static-group"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "static-service"))
 	})
 
 	It("appends owner-info from a configmap when a resource is owned by helm", func(ctx SpecContext) {
@@ -50,8 +51,8 @@ var _ = Describe("The webhook", Ordered, func() {
 		ownerConfigmap.Name = "owner-of-test-chart"
 		ownerConfigmap.Namespace = metav1.NamespaceDefault
 		ownerConfigmap.Data = map[string]string{
-			apiV1.OwnerConfigmapDataSupportGroup: "experts",
-			apiV1.OwnerConfigmapDataServiceKey:   "cool-service",
+			testConfig.Helm.SupportGroupDataKey: "experts",
+			testConfig.Helm.ServiceDataKey:      "cool-service",
 		}
 		Expect(k8sClient.Create(ctx, &ownerConfigmap)).To(Succeed())
 
@@ -70,8 +71,8 @@ var _ = Describe("The webhook", Ordered, func() {
 
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, resourceName, &result)).To(Succeed())
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "experts"))
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelService, "cool-service"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "experts"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "cool-service"))
 	})
 
 	It("appends owner-info from owner references", func(ctx SpecContext) {
@@ -93,16 +94,16 @@ var _ = Describe("The webhook", Ordered, func() {
 
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&owned), &result)).To(Succeed())
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "experts"))
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelService, "cool-service"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "experts"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "cool-service"))
 	})
 
 	It("adds owner from ingress when resource is claimed by ingress via vice-president", func(ctx SpecContext) {
 		var ingress networkingv1.Ingress
 		ingress.Name = "the-ingress"
 		ingress.Labels = map[string]string{
-			apiV1.LabelSupportGroup: "supporters",
-			apiV1.LabelService:      "ingress",
+			testConfig.Labels.SupportGroupKey(): "supporters",
+			testConfig.Labels.ServiceKey():      "ingress",
 		}
 		ingress.Namespace = metav1.NamespaceDefault
 		ingress.Spec.DefaultBackend = &networkingv1.IngressBackend{
@@ -120,14 +121,14 @@ var _ = Describe("The webhook", Ordered, func() {
 		claimed.Namespace = metav1.NamespaceDefault
 		claimed.Type = corev1.SecretTypeOpaque
 		claimed.Annotations = map[string]string{
-			"vice-president/claimed-by-ingress": metav1.NamespaceDefault + "/the-ingress",
+			testConfig.Traversal.VicePresidentAnnotationKey: metav1.NamespaceDefault + "/the-ingress",
 		}
 		Expect(k8sClient.Create(ctx, &claimed)).To(Succeed())
 
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&claimed), &result)).To(Succeed())
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "supporters"))
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelService, "ingress"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "supporters"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "ingress"))
 	})
 
 	It("pulls owner info for early-owner-of configmaps from actual owner-data configmap if it exists", func(ctx SpecContext) {
@@ -135,15 +136,15 @@ var _ = Describe("The webhook", Ordered, func() {
 		early.Name = "early-owner-of-test-chart"
 		early.Namespace = metav1.NamespaceDefault
 		early.Data = map[string]string{
-			apiV1.OwnerConfigmapDataSupportGroup: "early-experts",
-			apiV1.OwnerConfigmapDataServiceKey:   "early-service",
+			testConfig.Helm.SupportGroupDataKey: "early-experts",
+			testConfig.Helm.ServiceDataKey:      "early-service",
 		}
 		Expect(k8sClient.Create(ctx, &early)).To(Succeed())
 
 		var result corev1.ConfigMap
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&early), &result)).To(Succeed())
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "experts"))
-		Expect(result.Labels).To(HaveKeyWithValue(apiV1.LabelService, "cool-service"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "experts"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "cool-service"))
 	})
 
 	It("pulls owner-info for PVCs from StatefulSets", func(ctx SpecContext) {
@@ -151,8 +152,8 @@ var _ = Describe("The webhook", Ordered, func() {
 		statefulSet.Name = "persistent"
 		statefulSet.Namespace = metav1.NamespaceDefault
 		statefulSet.Labels = map[string]string{
-			apiV1.LabelSupportGroup: "storage",
-			apiV1.LabelService:      "sql",
+			testConfig.Labels.SupportGroupKey(): "storage",
+			testConfig.Labels.ServiceKey():      "sql",
 		}
 		statefulSet.Spec.Replicas = ptr.To(int32(2))
 		statefulSet.Spec.Template.Labels = map[string]string{"selector": "val"}
@@ -191,11 +192,10 @@ var _ = Describe("The webhook", Ordered, func() {
 		var resultSts appsv1.StatefulSet
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&statefulSet), &resultSts)).To(Succeed())
 
-		Expect(resultPVC.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "storage"))
-		Expect(resultPVC.Labels).To(HaveKeyWithValue(apiV1.LabelService, "sql"))
+		Expect(resultPVC.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "storage"))
+		Expect(resultPVC.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "sql"))
 
-		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(apiV1.LabelSupportGroup, "storage"))
-		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(apiV1.LabelService, "sql"))
+		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "storage"))
+		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "sql"))
 	})
-
 })

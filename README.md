@@ -120,39 +120,56 @@ make undeploy
 
 ## Configuration
 
-### Static rules (regex mapping)
+### Environment Variables
 
-Provide a ConfigMap named `owner-label-injector-config` with an embedded `config.yaml`:
+The owner-label-injector can be configured via environment variables:
 
-```yaml
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: owner-label-injector-config
-  namespace: owner-label-injector-system
-data:
-  config.yaml: |
-    rules:
-      - helmReleaseName: ".*"
-        helmReleaseNamespace: "kubernikus"
-        supportGroup: containers
-        # service: optional
+#### Label Configuration
+* `LABEL_PREFIX` (default: `ccloud`) — prefix for all injected labels
+* `SUPPORT_GROUP_SUFFIX` (default: `support-group`) — suffix for the support group label
+* `SERVICE_SUFFIX` (default: `service`) — suffix for the service label
+* `DATA_SOURCE_ANNOTATION_SUFFIX` (default: `support-group-datasource`) — suffix for data source annotation
+
+#### Helm Configuration
+* `OWNER_CONFIGMAP_PREFIX` (default: `owner-of-`) — prefix for primary owner ConfigMaps
+* `OWNER_CONFIGMAP_FALLBACK_PREFIX` (default: `early-owner-of-`) — prefix for fallback owner ConfigMaps
+* `SUPPORT_GROUP_DATA_KEY` (default: `support-group`) — key in ConfigMaps for support group data
+* `SERVICE_DATA_KEY` (default: `service`) — key in ConfigMaps for service data
+
+#### Traversal Configuration
+* `VICE_PRESIDENT_ANNOTATION_KEY` (default: `vice-president/claimed-by-ingress`) — annotation key for TLS cert ingress discovery
+
+#### Static Rules
+* `STATIC_RULES` — JSON array of static rules for mapping Helm releases to owner data
+
+When no owner ConfigMap exists for a Helm release, static rules provide regex-based mapping from Helm release name/namespace to `supportGroup` and optional `service`.
+
+Example JSON for `STATIC_RULES`:
+```json
+{
+  "rules": [
+    {
+      "helmReleaseName": ".*",
+      "helmReleaseNamespace": "kubernikus",
+      "supportGroup": "containers",
+      "service": "optional-service-name"
+    }
+  ]
+}
 ```
 
-Each rule:
+Each rule supports:
+* `helmReleaseName` (regex pattern) — matches against the Helm release name
+* `helmReleaseNamespace` (regex pattern) — matches against the Helm release namespace
+* `supportGroup` (string, required) — the support group to assign
+* `service` (string, optional) — the service to assign
 
-* `helmReleaseName` (regex)
-* `helmReleaseNamespace` (regex)
-* `supportGroup` (string, required)
-* `service` (string, optional)
-
-Mount this ConfigMap into the controller (and into the `labeller` CronJob if used). The controller reads its path from the `-config` flag.
+Rules are evaluated in order and the first matching rule is used.
 
 ### Binary flags
 
 The manager binary supports:
 
-* `-config` — path to the YAML config described above.
 * `-metrics-bind-address` — default `:8080`.
 * `-health-probe-bind-address` — default `:8081`.
 
@@ -168,15 +185,11 @@ Scan the cluster and backfill labels where owner data can be discovered.
 
 ```sh
 # dry run across all namespaces and cluster‑level APIs
-kubectl -n owner-label-injector-system create configmap owner-label-injector-config \
-  --from-file=config.yaml=./config/manager/configmap.yaml
-
 kubectl run -it --rm labeller --image=$IMG -- \
   --namespace=all \
   --cluster-level-apis=true \
   --namespaced-apis=true \
-  --dry-run \
-  --config=/owner-label-injector-config/config.yaml
+  --dry-run
 ```
 
 Flags:
@@ -186,7 +199,6 @@ Flags:
 * `--namespaced-apis` (default `true`)
 * `--summary` (print only a summary table)
 * `--dry-run` (do not patch resources)
-* `--config` (path to the same YAML config as the controller)
 
 ### label-remover
 

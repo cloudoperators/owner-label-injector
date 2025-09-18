@@ -30,6 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 
 	apiV1 "github.com/cloudoperators/owner-label-injector/api/v1"
+	internalCfg "github.com/cloudoperators/owner-label-injector/internal/config"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth/oidc"
 )
@@ -43,7 +44,6 @@ var EnableNamespacedAPIs bool
 var EnableClusterLevelAPIs bool
 var NamespacesFlag string
 var Summary bool
-var ConfigFile string
 var NamespacesListFromFlag []string = make([]string, 0)
 var DryRun bool
 
@@ -91,7 +91,6 @@ func main() {
 	flag.BoolVar(&EnableNamespacedAPIs, "namespaced-apis", true, "run for namespaced apis")
 	flag.BoolVar(&Summary, "summary", false, "only print summary")
 	flag.BoolVar(&DryRun, "dry-run", false, "do not label resources on the cluster")
-	flag.StringVar(&ConfigFile, "config", "", "Owner label injector configuration")
 
 	flag.Parse()
 
@@ -110,17 +109,6 @@ func main() {
 		}
 	}
 
-	// Config
-	staticConfig := &apiV1.OwnerLabelInjectorConfig{}
-	if ConfigFile != "" {
-		var err error
-		staticConfig, err = apiV1.NewConfig(ConfigFile)
-		if err != nil {
-			fmt.Println("unable to parse config: ", err)
-			return
-		}
-	}
-
 	cfg := config.GetConfigOrDie()
 	dynamicClient := dynamic.NewForConfigOrDie(cfg)
 	k8sClient, err := client.New(cfg, client.Options{})
@@ -128,6 +116,7 @@ func main() {
 		panic(err)
 	}
 
+	globalConfig := internalCfg.Get()
 	// config print
 	fmt.Println(strings.Repeat("=", dashLength))
 	fmt.Println("Configuration")
@@ -136,7 +125,11 @@ func main() {
 	fmt.Println("Namespaced APIs:	", EnableNamespacedAPIs)
 	fmt.Println("Dry run:		", DryRun)
 	fmt.Println()
-	fmt.Println("Static Rule File:	", ConfigFile)
+	fmt.Println("Config from env vars:")
+	fmt.Printf("  Support Group Label:\t%s\n", globalConfig.Labels.SupportGroupKey())
+	fmt.Printf("  Service Label:\t%s\n", globalConfig.Labels.ServiceKey())
+	fmt.Printf("  Data Source Annotation:\t%s\n", globalConfig.Labels.DataSourceAnnotation())
+	fmt.Printf("  Static Rules:\t\t%d configured\n", len(globalConfig.StaticRules.Rules))
 
 	if NamespacesFlag == "all" {
 		fmt.Println("Namespaces:		 all")
@@ -170,7 +163,7 @@ func main() {
 			fmt.Println(strings.Repeat("=", dashLength))
 			fmt.Printf("[%d/%d] %s/%s\n", i+1, len(apis.ClusterAPIs), capi.GroupVersion(), capi.Resource)
 
-			handleResources(ctx, dynamicClient, k8sClient, staticConfig, capi, "")
+			handleResources(ctx, dynamicClient, k8sClient, globalConfig, capi, "")
 
 			fmt.Println(strings.Repeat("=", dashLength))
 		}
@@ -187,11 +180,11 @@ func main() {
 
 			if NamespacesFlag == "all" {
 				for _, namespace := range namespaces {
-					handleResources(ctx, dynamicClient, k8sClient, staticConfig, api, namespace)
+					handleResources(ctx, dynamicClient, k8sClient, globalConfig, api, namespace)
 				}
 			} else {
 				for _, namespace := range NamespacesListFromFlag {
-					handleResources(ctx, dynamicClient, k8sClient, staticConfig, api, namespace)
+					handleResources(ctx, dynamicClient, k8sClient, globalConfig, api, namespace)
 				}
 			}
 
@@ -247,14 +240,15 @@ func summary(ctx context.Context, apis APIs, dynamicInt dynamic.Interface) {
 
 func countWithoutOwnerLabels(resources []unstructured.Unstructured) int {
 	count := 0
+	globalConfig := internalCfg.Get()
 	for _, resource := range resources {
 		labels := resource.GetLabels()
 		if labels == nil {
 			count++
 			continue
 		}
-		_, hasGroup := labels[apiV1.LabelSupportGroup]
-		_, hasService := labels[apiV1.LabelService]
+		_, hasGroup := labels[globalConfig.Labels.SupportGroupKey()]
+		_, hasService := labels[globalConfig.Labels.ServiceKey()]
 		if !hasGroup || !hasService {
 			count++
 		}
@@ -262,7 +256,7 @@ func countWithoutOwnerLabels(resources []unstructured.Unstructured) int {
 	return count
 }
 
-func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClient client.Client, fallbackConfig *apiV1.OwnerLabelInjectorConfig, gvr schema.GroupVersionResource, namespace string) {
+func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClient client.Client, globalConfig *internalCfg.Global, gvr schema.GroupVersionResource, namespace string) {
 	resources, err := GetResourcesDynamically(ctx, dynamicInt, gvr, namespace)
 	if err != nil {
 		fmt.Println(err)
@@ -280,7 +274,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 	for r, resource := range resources {
 		logHeader := fmt.Sprintf("- [%d/%d %s]", r+1, len(resources), resource.GetName())
 
-		ownerData, found, err := apiV1.UpwardTraverseGetOwnerData(ctx, k8sClient, fallbackConfig, namespace, &resource, true)
+		ownerData, found, err := apiV1.UpwardTraverseGetOwnerData(ctx, k8sClient, globalConfig, namespace, &resource, true)
 		if err != nil {
 			fmt.Printf("%s Error during get owner data: %v \n", logHeader, err)
 			continue
@@ -296,7 +290,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 		if currentAnnotations == nil {
 			currentAnnotations = make(map[string]string)
 		}
-		existingDataSource, hasExistingDataSource := currentAnnotations[apiV1.AnnotationSupportGroupDataSource]
+		existingDataSource, hasExistingDataSource := currentAnnotations[globalConfig.Labels.DataSourceAnnotation()]
 
 		// Only overwrite labels if DataSource is non‐empty and different
 		if hasExistingDataSource && existingDataSource != "" && existingDataSource != ownerData.DataSource {
@@ -317,7 +311,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 
 		// Update labels by comparing with ownerData
 		labelsUpdated := false
-		for k, v := range ownerData.Labels() {
+		for k, v := range ownerData.Labels(globalConfig) {
 			currentValue, exists := currentLabels[k]
 			if !exists || currentValue != v {
 				currentLabels[k] = v
@@ -334,7 +328,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 		fmt.Printf("%s Labels updated to: %+v \n", logHeader, currentLabels)
 
 		// Update annotations
-		currentAnnotations[apiV1.AnnotationSupportGroupDataSource] = ownerData.DataSource
+		currentAnnotations[globalConfig.Labels.DataSourceAnnotation()] = ownerData.DataSource
 		newResource.SetAnnotations(currentAnnotations)
 
 		if DryRun {
