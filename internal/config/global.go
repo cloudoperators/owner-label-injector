@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
-// SPDX-License-Identifier: Apache-2.0
-
 package config
 
 import (
@@ -32,7 +29,7 @@ func Get() *Global {
 			Prefix:                     getEnvOrDefault("LABEL_PREFIX", defaultPrefix),
 			SupportGroupSuffix:         getEnvOrDefault("SUPPORT_GROUP_SUFFIX", defaultSupportGroupSuffix),
 			ServiceSuffix:              getEnvOrDefault("SERVICE_SUFFIX", defaultServiceSuffix),
-			DataSourceAnnotationSuffix: getEnvOrDefault("DATA_SOURCE_ANNOTATION", defaultDataSourceAnnotationSuffix),
+			DataSourceAnnotationSuffix: getEnvOrDefault("DATA_SOURCE_ANNOTATION_SUFFIX", defaultDataSourceAnnotationSuffix),
 		}
 
 		helm := Helm{

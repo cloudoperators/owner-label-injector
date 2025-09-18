@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
-// SPDX-License-Identifier: Apache-2.0
-
 package config
 
 import (
@@ -27,6 +24,10 @@ const staticConfigDataSource = "static-config"
 
 // Check looks for a matching rule for the given Helm release name and namespace.
 func (c *StaticRules) Check(helmReleaseName, helmReleaseNamespace string) (bool, StaticRuleMatch) {
+	if c == nil || len(c.Rules) == 0 {
+		return false, StaticRuleMatch{}
+	}
+
 	for _, rule := range c.Rules {
 		releaseNameRegex := regexpext.PlainRegexp(rule.HelmReleaseName)
 		releaseNamespaceRegex := regexpext.PlainRegexp(rule.HelmReleaseNamespace)

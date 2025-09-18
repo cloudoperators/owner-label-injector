@@ -8,7 +8,7 @@ package v1
 
 import (
 	"context"
-	"errors"
+	"fmt"
 	"maps"
 	"strconv"
 	"strings"
@@ -76,7 +76,7 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 	service := cm.Data[cfg.Helm.ServiceDataKey]
 
 	if !supportGroupOK {
-		return OwnerData{}, false, errors.New("missing data in owner configmap")
+		return OwnerData{}, false, fmt.Errorf("missing data in owner config map: %s, namespace: %s", cm.Name, cm.Namespace)
 	}
 
 	return OwnerData{Service: service, SupportGroup: supportGroup, DataSource: OwnerConfigmapDatasource}, true, nil

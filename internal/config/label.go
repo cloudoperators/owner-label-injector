@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
-// SPDX-License-Identifier: Apache-2.0
-
 package config
 
 // LabelConfig defines the configurable label and annotation keys used by the owner-label-injector.
@@ -17,7 +14,7 @@ type Labels struct {
 	// ServiceSuffix is the suffix used for the service label key.
 	ServiceSuffix string
 
-	// DataSourceAnnotationSuffix is the full annotation key used to track the data source.
+	// DataSourceAnnotationSuffix is the suffix used for data source annotation key.
 	DataSourceAnnotationSuffix string
 }
 
