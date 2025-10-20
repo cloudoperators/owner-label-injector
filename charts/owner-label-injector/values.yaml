@@ -1,0 +1,77 @@
+global:
+  region:
+
+replicaCount: 3
+
+staging:
+  enabled: false
+  namespace: owner-label-injector-staging
+
+image:
+  repository: ghcr.io/cloudoperators/owner-label-injector
+  pullPolicy: IfNotPresent
+  # Overrides the image tag whose default is the chart appVersion.
+  tag: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+
+service:
+  type: ClusterIP
+  port: 443
+
+resources:
+  limits:
+    cpu: 800m
+    memory: 8000Mi
+  requests:
+    cpu: 400m
+    memory: 4000Mi
+
+# Configuration for owner-label-injector environment variables
+# All values are optional. If not specified, the application uses built-in defaults.
+# See internal/config/*.go for default values.
+config:
+  # Label configuration - defines label and annotation keys
+  labels:
+    # Prefix used for all injected labels (default: "ccloud")
+    prefix: "ccloud"
+    # Suffix for the support group label key (default: "support-group")
+    supportGroupSuffix: "support-group"
+    # Suffix for the service label key (default: "service")
+    serviceSuffix: "service"
+    # Suffix for data source annotation key (default: "support-group-datasource")
+    dataSourceAnnotationSuffix: "support-group-datasource"
+
+  # Helm configuration - defines ConfigMap discovery settings
+  helm:
+    # Prefix for primary owner ConfigMaps (default: "owner-of-")
+    ownerConfigMapPrefix: "owner-of-"
+    # Prefix for fallback owner ConfigMaps (default: "early-owner-of-")
+    ownerConfigMapFallbackPrefix: "early-owner-of-"
+    # Key used in ConfigMaps for support group data (default: "support-group")
+    supportGroupDataKey: "support-group"
+    # Key used in ConfigMaps for service data (default: "service")
+    serviceDataKey: "service"
+
+  # Traversal configuration - defines traversal behavior
+  traversal:
+    # Annotation key for TLS cert ingress discovery (default: "vice-president/claimed-by-ingress")
+    vicePresidentAnnotationKey: "vice-president/claimed-by-ingress"
+
+  # Static rules configuration (optional)
+  # Provide as a YAML object with "rules" array (will be converted to JSON)
+  # Example:
+  # staticRules:
+  #   rules:
+  #     - helmReleaseName: ".*"
+  #       helmReleaseNamespace: "kubernikus"
+  #       supportGroup: "containers"
+  #       service: "optional-service-name"
+  staticRules: {}

@@ -10,3 +10,4 @@
 /*.env
 !Makefile.maker.yaml
 !.golangci.yaml
+!ct.yaml
