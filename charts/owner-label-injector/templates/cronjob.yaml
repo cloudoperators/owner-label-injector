@@ -1,3 +1,4 @@
+{{- if .Values.cronjob.enabled }}
 apiVersion: batch/v1
 kind: CronJob
 metadata:
@@ -5,7 +6,7 @@ metadata:
   labels:
     {{- include "owner-label-injector.labels" . | nindent 4 }}
 spec:
-  schedule: 0 */6 * * *
+  schedule: {{ .Values.cronjob.schedule | quote }}
   jobTemplate:
     spec:
       template:
@@ -15,11 +16,7 @@ spec:
           containers:
             - name: {{ .Chart.Name }}
               args:
-              - --config=/owner-label-injector-config/config.yaml
               - --cluster-level-apis=false
-              {{ if .Values.staging.enabled }}
-              - --namespace={{ .Values.staging.namespace }}
-              {{ end }}
               command:
               - /labeller
               securityContext:
@@ -67,12 +64,6 @@ spec:
               - name: STATIC_RULES
                 value: {{ dict "rules" . | toJson | quote }}
               {{- end }}
-              volumeMounts:
-              - mountPath: /owner-label-injector-config
-                name: config
               resources:
                 {{- toYaml .Values.resources | nindent 16 }}
-          volumes:
-          - name: config
-            configMap:
-              name: {{ include "owner-label-injector.fullname" . }}
+{{- end }}

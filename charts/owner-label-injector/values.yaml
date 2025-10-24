@@ -3,9 +3,13 @@ global:
 
 replicaCount: 3
 
-staging:
+cronjob:
   enabled: false
-  namespace: owner-label-injector-staging
+  schedule: "0 */6 * * *"
+
+prometheus:
+  scrape: "true"
+  targets: "kubernetes"
 
 image:
   repository: ghcr.io/cloudoperators/owner-label-injector

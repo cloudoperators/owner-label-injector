@@ -14,17 +14,12 @@ spec:
       labels:
         {{- include "owner-label-injector.selectorLabels" . | nindent 8 }}
       annotations:
-        prometheus.io/scrape: "true"
-        prometheus.io/targets: kubernetes
-        {{- if and $.Values.global.linkerd_enabled $.Values.global.linkerd_requested }}
-        linkerd.io/inject: enabled
-        {{- end }}
+        prometheus.io/scrape: {{ .Values.prometheus.scrape | quote }}
+        prometheus.io/targets: {{ .Values.prometheus.targets | quote }}
     spec:
       serviceAccountName: {{ include "owner-label-injector.serviceAccountName" . }}
       containers:
         - name: {{ .Chart.Name }}
-          args:
-          - --config=/owner-label-injector-config/config.yaml
           command:
           - /manager
           securityContext:
@@ -73,8 +68,6 @@ spec:
             value: {{ dict "rules" . | toJson | quote }}
           {{- end }}
           volumeMounts:
-          - mountPath: /owner-label-injector-config
-            name: config
           - mountPath: /tmp/k8s-webhook-server/serving-certs
             name: cert
             readOnly: true
@@ -100,6 +93,3 @@ spec:
         secret:
           defaultMode: 420
           secretName: {{ include "owner-label-injector.fullname" . }}
-      - name: config
-        configMap:
-          name: {{ include "owner-label-injector.fullname" . }}

@@ -6,14 +6,6 @@ metadata:
     {{- include "owner-label-injector.labels" . | nindent 4 }}
 rules:
 - apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - get
-  - list
-  - watch
-- apiGroups:
   - '*'
   resources:
   - '*'
