@@ -1,0 +1,69 @@
+{{- if .Values.cronjob.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "owner-label-injector.fullname" . }}
+  labels:
+    {{- include "owner-label-injector.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.cronjob.schedule | quote }}
+  jobTemplate:
+    spec:
+      template:
+        spec:
+          serviceAccountName: {{ include "owner-label-injector.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: {{ .Chart.Name }}
+              args:
+              - --cluster-level-apis=false
+              command:
+              - /labeller
+              securityContext:
+                {{- toYaml .Values.securityContext | nindent 16 }}
+              image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+              imagePullPolicy: {{ .Values.image.pullPolicy }}
+              env:
+              {{- with .Values.config.labels.prefix }}
+              - name: LABEL_PREFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.labels.supportGroupSuffix }}
+              - name: SUPPORT_GROUP_SUFFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.labels.serviceSuffix }}
+              - name: SERVICE_SUFFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.labels.dataSourceAnnotationSuffix }}
+              - name: DATA_SOURCE_ANNOTATION_SUFFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.helm.ownerConfigMapPrefix }}
+              - name: OWNER_CONFIGMAP_PREFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.helm.ownerConfigMapFallbackPrefix }}
+              - name: OWNER_CONFIGMAP_FALLBACK_PREFIX
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.helm.supportGroupDataKey }}
+              - name: SUPPORT_GROUP_DATA_KEY
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.helm.serviceDataKey }}
+              - name: SERVICE_DATA_KEY
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.traversal.vicePresidentAnnotationKey }}
+              - name: VICE_PRESIDENT_ANNOTATION_KEY
+                value: {{ . | quote }}
+              {{- end }}
+              {{- with .Values.config.staticRules.rules }}
+              - name: STATIC_RULES
+                value: {{ dict "rules" . | toJson | quote }}
+              {{- end }}
+              resources:
+                {{- toYaml .Values.resources | nindent 16 }}
+{{- end }}
