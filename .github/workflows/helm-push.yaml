@@ -4,8 +4,6 @@ on:
   push:
     tags:
       - "v*.*.*"
-    paths:
-      - 'charts/**'
 
 permissions:
   contents: write
@@ -51,6 +49,7 @@ jobs:
         with:
           files: |
             charts/owner-label-injector/**
+          base_ref: main
 
       - name: Check if Helm chart with same version already exists
         id: check-chart
