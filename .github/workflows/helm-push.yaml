@@ -1,6 +1,7 @@
 name: Package Helm Chart and publish to GitHub Packages
 
 on:
+  workflow_dispatch: { }
   push:
     tags:
       - "v*.*.*"
@@ -43,22 +44,9 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get changed files
-        id: changed-files
-        uses: tj-actions/changed-files@24d32ffd492484c1d75e0c0b894501ddb9d30d62 # v47
-        with:
-          files: |
-            charts/owner-label-injector/**
-          base_ref: main
-
       - name: Check if Helm chart with same version already exists
         id: check-chart
-        if: steps.changed-files.outputs.all_changed_files != ''
-        env:
-          ALL_CHANGED_FILES: ${{ steps.changed-files.outputs.all_changed_files }}
         run: |
-          # List all changed
-          echo "All changed files: $ALL_CHANGED_FILES"
           chartName=$(yq .name "charts/owner-label-injector/Chart.yaml")
           chartVersion=$(yq .version "charts/owner-label-injector/Chart.yaml")
           echo "chart_version=${chartVersion}" >> "$GITHUB_OUTPUT"
@@ -75,7 +63,7 @@ jobs:
           exit 1
 
       - name: Push Charts to GHCR
-        if: steps.changed-files.outputs.all_changed_files != '' && steps.check-chart.outputs.bump != 'true'
+        if: steps.check-chart.outputs.bump != 'true'
         run: |
           helm dependency update charts/owner-label-injector
           helm package charts/owner-label-injector -d charts/owner-label-injector
