@@ -82,3 +82,14 @@ config:
   #       supportGroup: "containers"
   #       service: "optional-service-name"
   staticRules: {}
+
+# Webhook configuration
+webhook:
+  # Timeout in seconds for webhook admission decisions (default: 10, max: 30)
+  timeoutSeconds: 10
+  namespaceSelector:
+    # List of namespace names to exclude from webhook processing
+    # The webhook will not intercept resources in these namespaces
+    excludedNamespaces:
+      - kube-system
+      - kube-node-lease

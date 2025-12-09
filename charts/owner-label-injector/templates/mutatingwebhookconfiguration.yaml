@@ -19,12 +19,16 @@ webhooks:
   - name: skip-endpoints
     expression: "!(object.kind in ['Endpoints', 'EndpointSlice'])"
   name: owner-label-injector.generic.ccloud
+  {{- with .Values.webhook.namespaceSelector.excludedNamespaces }}
   namespaceSelector:
     matchExpressions:
     - key: kubernetes.io/metadata.name
       operator: NotIn
       values:
-      - kube-node-lease
+      {{- range . }}
+      - {{ . | quote }}
+      {{- end }}
+  {{- end }}
   rules:
   - apiGroups:
     - '*'
@@ -36,3 +40,4 @@ webhooks:
     resources:
     - '*'
   sideEffects: NoneOnDryRun
+  timeoutSeconds: {{ .Values.webhook.timeoutSeconds | default 10 }}
