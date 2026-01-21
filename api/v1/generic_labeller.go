@@ -27,6 +27,7 @@ import (
 // +kubebuilder:rbac:groups="*",resources="*",verbs=list;get;patch
 
 // +kubebuilder:rbac:groups="",resources=configmaps,verbs=list;get;watch
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=list;get;watch
 
 type GenericLabeller struct {
 	Config  *config.Global
