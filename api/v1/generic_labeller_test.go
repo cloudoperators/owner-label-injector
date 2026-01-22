@@ -7,6 +7,11 @@
 package v1_test
 
 import (
+	"bytes"
+	"compress/gzip"
+	"encoding/base64"
+	"encoding/json"
+
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 
@@ -197,5 +202,112 @@ var _ = Describe("The webhook", Ordered, func() {
 
 		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "storage"))
 		Expect(resultSts.Spec.Template.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "sql"))
+	})
+
+	It("appends owner-info from Helm release secret when global.greenhouse.ownedBy is set", func(ctx SpecContext) {
+		helmRelease := map[string]interface{}{
+			"config": map[string]interface{}{
+				"global": map[string]interface{}{
+					"greenhouse": map[string]interface{}{
+						"ownedBy": "greenhouse-team",
+					},
+				},
+			},
+		}
+
+		releaseJSON, err := json.Marshal(helmRelease)
+		Expect(err).NotTo(HaveOccurred())
+
+		var buf bytes.Buffer
+		gzipWriter := gzip.NewWriter(&buf)
+		_, err = gzipWriter.Write(releaseJSON)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gzipWriter.Close()).To(Succeed())
+
+		encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+		var helmSecret corev1.Secret
+		helmSecret.Name = "sh.helm.release.v1.greenhouse-release.v1"
+		helmSecret.Namespace = metav1.NamespaceDefault
+		helmSecret.Type = "helm.sh/release.v1"
+		helmSecret.Data = map[string][]byte{
+			"release": []byte(encoded),
+		}
+		Expect(k8sClient.Create(ctx, &helmSecret)).To(Succeed())
+
+		var resource corev1.Secret
+		resource.Name = "greenhouse-managed-secret"
+		resource.Namespace = metav1.NamespaceDefault
+		resource.Type = corev1.SecretTypeOpaque
+		resource.Labels = map[string]string{
+			apiV1.HelmLabelKey: apiV1.HelmLabelValue,
+		}
+		resource.Annotations = map[string]string{
+			apiV1.HelmReleaseNameAnnotation:      "greenhouse-release",
+			apiV1.HelmReleaseNamespaceAnnotation: metav1.NamespaceDefault,
+		}
+		Expect(k8sClient.Create(ctx, &resource)).To(Succeed())
+
+		var result corev1.Secret
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&resource), &result)).To(Succeed())
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "greenhouse-team"))
+	})
+
+	It("prefers Helm release secret over ConfigMap when both exist", func(ctx SpecContext) {
+		var ownerConfigmap corev1.ConfigMap
+		ownerConfigmap.Name = "owner-of-priority-release"
+		ownerConfigmap.Namespace = metav1.NamespaceDefault
+		ownerConfigmap.Data = map[string]string{
+			testConfig.Helm.SupportGroupDataKey: "configmap-team",
+			testConfig.Helm.ServiceDataKey:      "configmap-service",
+		}
+		Expect(k8sClient.Create(ctx, &ownerConfigmap)).To(Succeed())
+
+		helmRelease := map[string]interface{}{
+			"config": map[string]interface{}{
+				"global": map[string]interface{}{
+					"greenhouse": map[string]interface{}{
+						"ownedBy": "helm-secret-team",
+					},
+				},
+			},
+		}
+
+		releaseJSON, err := json.Marshal(helmRelease)
+		Expect(err).NotTo(HaveOccurred())
+
+		var buf bytes.Buffer
+		gzipWriter := gzip.NewWriter(&buf)
+		_, err = gzipWriter.Write(releaseJSON)
+		Expect(err).NotTo(HaveOccurred())
+		Expect(gzipWriter.Close()).To(Succeed())
+
+		encoded := base64.StdEncoding.EncodeToString(buf.Bytes())
+
+		var helmSecret corev1.Secret
+		helmSecret.Name = "sh.helm.release.v1.priority-release.v1"
+		helmSecret.Namespace = metav1.NamespaceDefault
+		helmSecret.Type = "helm.sh/release.v1"
+		helmSecret.Data = map[string][]byte{
+			"release": []byte(encoded),
+		}
+		Expect(k8sClient.Create(ctx, &helmSecret)).To(Succeed())
+
+		var resource corev1.Secret
+		resource.Name = "priority-test-secret"
+		resource.Namespace = metav1.NamespaceDefault
+		resource.Type = corev1.SecretTypeOpaque
+		resource.Labels = map[string]string{
+			apiV1.HelmLabelKey: apiV1.HelmLabelValue,
+		}
+		resource.Annotations = map[string]string{
+			apiV1.HelmReleaseNameAnnotation:      "priority-release",
+			apiV1.HelmReleaseNamespaceAnnotation: metav1.NamespaceDefault,
+		}
+		Expect(k8sClient.Create(ctx, &resource)).To(Succeed())
+
+		var result corev1.Secret
+		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&resource), &result)).To(Succeed())
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "helm-secret-team"))
 	})
 })

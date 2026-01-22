@@ -26,8 +26,6 @@ import (
 // +kubebuilder:webhook:path=/mutate-generic,mutating=true,failurePolicy=ignore,groups="*",resources="*",verbs=create;update,sideEffects=NoneOnDryRun,versions="*",admissionReviewVersions=v1,name=owner-label-injector.generic.ccloud
 // +kubebuilder:rbac:groups="*",resources="*",verbs=list;get;patch
 
-// +kubebuilder:rbac:groups="",resources=configmaps,verbs=list;get;watch
-
 type GenericLabeller struct {
 	Config  *config.Global
 	Client  client.Client

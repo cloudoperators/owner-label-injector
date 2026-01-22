@@ -7,8 +7,13 @@
 package v1
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
+	"encoding/base64"
+	"encoding/json"
 	"fmt"
+	"io"
 	"maps"
 	"strconv"
 	"strings"
@@ -82,6 +87,94 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 	return OwnerData{Service: service, SupportGroup: supportGroup, DataSource: OwnerConfigmapDatasource}, true, nil
 }
 
+const HelmReleaseSecretDatasource = "helm-release-secret"
+const HelmReleaseSecretPrefix = "sh.helm.release.v1."
+const HelmReleaseSecretType = "helm.sh/release.v1"
+
+func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, releaseName, releaseNamespace string) (OwnerData, bool, error) {
+	secretList := &corev1.SecretList{}
+	err := c.List(ctx, secretList, client.InNamespace(releaseNamespace))
+	if err != nil {
+		return OwnerData{}, false, err
+	}
+
+	var latestSecret *corev1.Secret
+	latestVersion := 0
+	prefix := HelmReleaseSecretPrefix + releaseName + ".v"
+
+	for i := range secretList.Items {
+		secret := &secretList.Items[i]
+		if secret.Type != HelmReleaseSecretType {
+			continue
+		}
+		if !strings.HasPrefix(secret.Name, prefix) {
+			continue
+		}
+
+		versionStr := strings.TrimPrefix(secret.Name, prefix)
+		version, err := strconv.Atoi(versionStr)
+		if err != nil {
+			continue
+		}
+
+		if version > latestVersion {
+			latestVersion = version
+			latestSecret = secret
+		}
+	}
+
+	if latestSecret == nil {
+		return OwnerData{}, false, nil
+	}
+
+	releaseData, ok := latestSecret.Data["release"]
+	if !ok {
+		return OwnerData{}, false, nil
+	}
+
+	values, err := decodeHelmReleaseValues(releaseData)
+	if err != nil {
+		return OwnerData{}, false, err
+	}
+
+	ownedBy, found, err := unstructured.NestedString(values, "global", "greenhouse", "ownedBy")
+	if err != nil || !found || ownedBy == "" {
+		return OwnerData{}, false, nil
+	}
+
+	return OwnerData{
+		SupportGroup: ownedBy,
+		DataSource:   HelmReleaseSecretDatasource,
+	}, true, nil
+}
+
+func decodeHelmReleaseValues(data []byte) (map[string]interface{}, error) {
+	decoded, err := base64.StdEncoding.DecodeString(string(data))
+	if err != nil {
+		return nil, fmt.Errorf("failed to base64 decode: %w", err)
+	}
+
+	reader, err := gzip.NewReader(bytes.NewReader(decoded))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create gzip reader: %w", err)
+	}
+	defer reader.Close()
+
+	decompressed, err := io.ReadAll(reader)
+	if err != nil {
+		return nil, fmt.Errorf("failed to decompress: %w", err)
+	}
+
+	var release struct {
+		Config map[string]interface{} `json:"config"`
+	}
+	if err := json.Unmarshal(decompressed, &release); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal release JSON: %w", err)
+	}
+
+	return release.Config, nil
+}
+
 func WorkloadAPILabeller(object *unstructured.Unstructured, ownerData OwnerData, cfg *config.Global) (*unstructured.Unstructured, bool, error) {
 	// If there is an owner, skip it
 	ownerReferences := object.GetOwnerReferences()
@@ -148,6 +241,14 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 
 	// if it is managed by helm, check for its owner-info chart
 	if managedByHelm {
+		ownerDataFromHelmSecret, found, err := GetOwnerDataFromHelmReleaseSecret(ctx, k8sClient, release, releaseNamespace)
+		if err != nil {
+			return OwnerData{}, false, err
+		}
+		if found {
+			return ownerDataFromHelmSecret, true, nil
+		}
+
 		ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, cfg, release, releaseNamespace)
 		if found {
 			return ownerDataFromOwnerConfigmap, true, nil
@@ -155,6 +256,7 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 		if err != nil {
 			return ownerDataFromOwnerConfigmap, false, err
 		}
+
 		// Check static rules from environment variables.
 		if len(cfg.StaticRules.Rules) > 0 {
 			found, staticMatch := cfg.StaticRules.Check(release, releaseNamespace)
