@@ -144,6 +144,7 @@ func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, rel
 
 	return OwnerData{
 		SupportGroup: ownedBy,
+		Service:      releaseName,
 		DataSource:   HelmReleaseSecretDatasource,
 	}, true, nil
 }

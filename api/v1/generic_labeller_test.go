@@ -251,6 +251,7 @@ var _ = Describe("The webhook", Ordered, func() {
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&resource), &result)).To(Succeed())
 		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "greenhouse-team"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "greenhouse-release"))
 	})
 
 	It("prefers Helm release secret over ConfigMap when both exist", func(ctx SpecContext) {
@@ -309,5 +310,6 @@ var _ = Describe("The webhook", Ordered, func() {
 		var result corev1.Secret
 		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(&resource), &result)).To(Succeed())
 		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.SupportGroupKey(), "helm-secret-team"))
+		Expect(result.Labels).To(HaveKeyWithValue(testConfig.Labels.ServiceKey(), "priority-release"))
 	})
 })
