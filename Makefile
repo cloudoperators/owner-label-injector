@@ -271,4 +271,25 @@ help: FORCE
 	@printf "  \e[36mmodernize\e[0m                    Run modernize on all non-vendored .go files\n"
 	@printf "  \e[36mclean\e[0m                        Run git clean.\n"
 
+E2E_SCENARIO ?= webhook
+E2E_NAMESPACE ?= oli-e2e
+E2E_REPORT_PATH = $(CURDIR)/build/$(E2E_SCENARIO)-e2e-report.json
+KIND_CLUSTER_NAME ?= oli-e2e
+IMG ?= owner-label-injector:e2e
+
+.PHONY: setup-e2e
+setup-e2e:
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_NAMESPACE=$(E2E_NAMESPACE) IMG=$(IMG) \
+		./e2e/webhook/setup.sh
+
+.PHONY: teardown-e2e
+teardown-e2e:
+	KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./e2e/webhook/teardown.sh
+
+.PHONY: e2e
+e2e: | build
+	E2E_NAMESPACE=$(E2E_NAMESPACE) \
+		GOMEGA_DEFAULT_EVENTUALLY_TIMEOUT="2m" \
+		go test -tags="$(E2E_SCENARIO)E2E" $(CURDIR)/e2e/$(E2E_SCENARIO) -test.v -ginkgo.v --ginkgo.json-report=$(E2E_REPORT_PATH)
+
 .PHONY: FORCE

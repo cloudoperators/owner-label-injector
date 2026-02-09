@@ -1,0 +1,6 @@
+apiVersion: v2
+name: webhook-test
+description: Minimal chart for webhook e2e tests (no owner-info dependency)
+type: application
+version: 0.1.0
+appVersion: "1.0.0"

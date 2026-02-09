@@ -1,9 +1,6 @@
 // SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company and Greenhouse contributors
 // SPDX-License-Identifier: Apache-2.0
 
-// SPDX-FileCopyrightText: 2024 SAP SE or an SAP affiliate company
-// SPDX-License-Identifier: Apache-2.0
-
 package v1_test
 
 import (
@@ -39,9 +36,9 @@ var (
 	testConfig     *config.Global
 )
 
-func TestRotation(t *testing.T) {
+func TestGenericLabeller(t *testing.T) {
 	RegisterFailHandler(Fail)
-	RunSpecs(t, "Rotation Suite")
+	RunSpecs(t, "Generic Labeller Suite")
 }
 
 var _ = BeforeSuite(func() {

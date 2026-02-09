@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Release.Name }}-data
+  labels:
+    app.kubernetes.io/managed-by: {{ .Release.Service }}
+    app.kubernetes.io/instance: {{ .Release.Name }}
+    app.kubernetes.io/name: {{ .Chart.Name }}
+  {{- if .Values.triggerUpdate }}
+  annotations:
+    e2e/trigger: {{ .Values.triggerUpdate | quote }}
+  {{- end }}
+data:
+  test-key: "test-value"

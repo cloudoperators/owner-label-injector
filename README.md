@@ -41,16 +41,17 @@ These labels make ownership **auditable and enforceable** across clusters: for i
 At admission time, the webhook inspects the incoming object and determines its **owner data** using the following precedence:
 
 1. **Existing labels on the object** → if both owner labels are already present and valid, the request is allowed unchanged.
-2. **Helm release metadata** → for Helm‑managed objects (`app.kubernetes.io/managed-by=helm` and `meta.helm.sh/*` annotations), the injector looks up a per‑release ConfigMap:
+2. **Helm release secret** → for Helm‑managed objects, the injector looks for `sh.helm.release.v1.<release>.vN` secrets and reads `global.greenhouse.ownedBy` from the highest‑versioned release. This is the primary source for Greenhouse‑managed releases.
+3. **Helm owner ConfigMap** → if no `ownedBy` value is found in the release secret, the injector looks up a per‑release ConfigMap:
 
    * `owner-of-<release>` in the **release namespace** (primary source)
    * `early-owner-of-<release>` (fallback, e.g., for pre‑release/bootstrapping)
-3. **Static rules** → if no owner ConfigMap exists, a regex‑based rules file maps Helm release **name/namespace** to `supportGroup` and optional `service`.
-4. **Owner traversal** → for non‑Helm or generated resources, the injector follows `ownerReferences` upward (and handles special cases) until owner data is found.
+4. **Static rules** → if no owner ConfigMap exists, a regex‑based rules file maps Helm release **name/namespace** to `supportGroup` and optional `service`.
+5. **Owner traversal** → for non‑Helm or generated resources, the injector follows `ownerReferences` upward (and handles special cases) until owner data is found.
 
-Once found, labels are merged into the object’s `metadata.labels`. If the object contains a **pod template** (Deployment/StatefulSet/DaemonSet/Job/CronJob), the same labels are merged into `.spec.template.metadata.labels`.
+Once found, labels are merged into the object's `metadata.labels`. If the object contains a **pod template** (Deployment/StatefulSet/DaemonSet/Job/CronJob), the same labels are merged into `.spec.template.metadata.labels`.
 
-> The annotation `ccloud/support-group-datasource` is set when labels are sourced from the Helm owner ConfigMap (value: `owner-info`).
+> The annotation `<prefix>/support-group-datasource` records where labels were sourced from. Possible values: `helm-release-secret`, `owner-info` (ConfigMap), or `static-config`.
 
 ### Special cases handled during traversal
 
@@ -71,7 +72,7 @@ Supporting directories:
 
 * `api/v1/` — admission handler and helpers (`generic_labeller.go`, `utils.go`, `config.go`).
 * `config/` — Kustomize overlays for the manager, webhook, RBAC, cert‑manager, and a CronJob that can run the `labeller` periodically.
-* `e2e/` — minimal Helm chart and script that deploys sample workloads and verifies labelling end‑to‑end.
+* `e2e/` — KinD‑based end‑to‑end tests with a test Helm chart, covering release‑secret precedence, ConfigMap fallback, label stickiness, and owner‑reference traversal.
 
 ---
 
@@ -233,7 +234,7 @@ Flags:
 ## Security & RBAC
 
 * The webhook’s `MutatingWebhookConfiguration` is configured with `failurePolicy: Ignore` so API requests don’t fail if the injector is unavailable.
-* ClusterRole `manager-role` (in `config/rbac/role.yaml`) grants `get,list,patch` on `*/*` plus `get,list,watch` on ConfigMaps — necessary for discovery and patching. Review and tighten for your environment.
+* ClusterRole `manager-role` (in `config/rbac/role.yaml`) grants `get,list,patch,watch` on `*/*` — necessary for discovery, caching, and patching. Review and tighten for your environment.
 * Pod security context drops **all** capabilities and disables privilege escalation in provided manifests.
 
 ---
@@ -241,13 +242,13 @@ Flags:
 ## Testing
 
 * **Unit tests** (Ginkgo/Gomega) cover the admission logic: run with `go test ./...`.
-* **End‑to‑end**: `e2e/e2e.sh` deploys a tiny Helm chart with/without owner info and checks that workloads end up labelled correctly.
+* **End‑to‑end**: `make setup-e2e` creates a KinD cluster with the webhook deployed, then `make e2e` runs Ginkgo tests covering release‑secret precedence, ConfigMap fallback, no‑source, label stickiness, and owner‑reference traversal. E2E tests also run in CI via GitHub Actions.
 
 ---
 
 ## Local development
 
-Requirements: Go (per `go.mod`), `kustomize`, `kubectl`.
+Requirements: Go (per `go.mod`), `kustomize`, `kubectl`, `helm`, `kind` (for e2e).
 
 Common tasks:
 

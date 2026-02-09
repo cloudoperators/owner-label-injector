@@ -1,0 +1,5 @@
+# triggerUpdate: set to any value during helm upgrade to force a resource update
+triggerUpdate: ""
+
+deployment:
+  enabled: false
