@@ -2,8 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 
 apiVersion: v2
-name: owner-label-injector
-description: A Helm chart for Kubernetes
+name: webhook-test
+description: Minimal chart for webhook e2e tests (no owner-info dependency)
 type: application
-version: 2.3.0
-appVersion: "v2.1.1"
+version: 0.1.0
+appVersion: "1.0.0"

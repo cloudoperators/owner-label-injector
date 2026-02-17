@@ -1,0 +1,108 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    paths:
+      - .github/workflows/e2e.yaml
+      - api/**
+      - internal/**
+      - labeller/**
+      - label-remover/**
+      - main.go
+      - Dockerfile
+      - go.mod
+      - go.sum
+      - charts/**
+      - e2e/**
+  push:
+    branches:
+      - main
+    paths:
+      - .github/workflows/e2e.yaml
+      - api/**
+      - internal/**
+      - labeller/**
+      - label-remover/**
+      - main.go
+      - Dockerfile
+      - go.mod
+      - go.sum
+      - charts/**
+      - e2e/**
+
+env:
+  KIND_CLUSTER_NAME: oli-e2e
+  E2E_NAMESPACE: oli-e2e
+  IMG: owner-label-injector:e2e
+  CERT_MANAGER_VERSION: v1.17.2
+
+jobs:
+  e2e:
+    name: Webhook E2E
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+
+      - name: Set up Go
+        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff
+        with:
+          go-version-file: go.mod
+
+      - name: Set up Helm
+        uses: azure/setup-helm@1a275c3b69536ee54be43f2070a358922e12c8d4
+
+      - name: Create KinD cluster
+        uses: helm/kind-action@92086f6be054225fa813e0a4b13787fc9088faab
+        with:
+          cluster_name: ${{ env.KIND_CLUSTER_NAME }}
+          wait: 5m
+
+      - name: Install cert-manager
+        run: |
+          kubectl apply -f "https://github.com/cert-manager/cert-manager/releases/download/${CERT_MANAGER_VERSION}/cert-manager.yaml"
+          kubectl wait --for=condition=Available -n cert-manager deployment/cert-manager --timeout=120s
+          kubectl wait --for=condition=Available -n cert-manager deployment/cert-manager-cainjector --timeout=120s
+          kubectl wait --for=condition=Available -n cert-manager deployment/cert-manager-webhook --timeout=120s
+
+      - name: Build and load Docker image
+        run: |
+          docker build -t "$IMG" .
+          kind load docker-image "$IMG" --name "$KIND_CLUSTER_NAME"
+
+      - name: Deploy webhook via Helm
+        run: |
+          helm install owner-label-injector charts/owner-label-injector \
+            --namespace owner-label-injector-system \
+            --create-namespace \
+            --set image.repository=owner-label-injector \
+            --set image.tag=e2e \
+            --set image.pullPolicy=Never \
+            --set replicaCount=1 \
+            --set cronjob.enabled=false \
+            --set resources.requests.cpu=10m \
+            --set resources.requests.memory=64Mi \
+            --set resources.limits.cpu=500m \
+            --set resources.limits.memory=128Mi \
+            --wait --timeout 120s
+
+      - name: Create test namespace
+        run: kubectl create namespace "$E2E_NAMESPACE"
+
+      - name: Run E2E tests
+        run: |
+          E2E_NAMESPACE=$E2E_NAMESPACE \
+          GOMEGA_DEFAULT_EVENTUALLY_TIMEOUT="2m" \
+            go test -tags=webhookE2E ./e2e/webhook/... -test.v -ginkgo.v \
+            --ginkgo.json-report=build/e2e-report.json
+
+      - name: Upload test report
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: e2e-report
+          path: build/e2e-report.json
+          if-no-files-found: ignore

@@ -38,8 +38,10 @@ renovate:
 reuse:
   annotations:
     - paths:
+      - .github/workflows/e2e.yaml
       - config/**/*.yaml
-      - e2e/test-chart/**/*
+      - e2e/test-chart-webhook/**/*
+      - e2e/webhook/*.sh
       - PROJECT
       SPDX-FileCopyrightText: SAP SE or an SAP affiliate company
       SPDX-License-Identifier: Apache-2.0
@@ -86,3 +88,24 @@ verbatim: |
   # Call with ignore-not-found=true to ignore resource not found errors during deletion.
   undeploy:
     $(KUSTOMIZE) build config/default | kubectl delete --ignore-not-found=$(ignore-not-found) -f -
+
+  E2E_SCENARIO ?= webhook
+  E2E_NAMESPACE ?= oli-e2e
+  E2E_REPORT_PATH = $(CURDIR)/build/$(E2E_SCENARIO)-e2e-report.json
+  KIND_CLUSTER_NAME ?= oli-e2e
+  IMG ?= owner-label-injector:e2e
+
+  .PHONY: setup-e2e
+  setup-e2e:
+    KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) E2E_NAMESPACE=$(E2E_NAMESPACE) IMG=$(IMG) \
+      ./e2e/webhook/setup.sh
+
+  .PHONY: teardown-e2e
+  teardown-e2e:
+    KIND_CLUSTER_NAME=$(KIND_CLUSTER_NAME) ./e2e/webhook/teardown.sh
+
+  .PHONY: e2e
+  e2e: | build
+    E2E_NAMESPACE=$(E2E_NAMESPACE) \
+      GOMEGA_DEFAULT_EVENTUALLY_TIMEOUT="2m" \
+      go test -tags="$(E2E_SCENARIO)E2E" $(CURDIR)/e2e/$(E2E_SCENARIO) -test.v -ginkgo.v --ginkgo.json-report=$(E2E_REPORT_PATH)
