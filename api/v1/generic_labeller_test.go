@@ -27,15 +27,15 @@ import (
 
 // createEncodedHelmRelease builds a Helm release payload (JSON -> gzip -> base64).
 func createEncodedHelmRelease(ownedBy string) []byte {
-	config := map[string]interface{}{}
+	config := map[string]any{}
 	if ownedBy != "" {
-		config["global"] = map[string]interface{}{
-			"greenhouse": map[string]interface{}{
+		config["global"] = map[string]any{
+			"greenhouse": map[string]any{
 				"ownedBy": ownedBy,
 			},
 		}
 	}
-	helmRelease := map[string]interface{}{"config": config}
+	helmRelease := map[string]any{"config": config}
 
 	releaseJSON, err := json.Marshal(helmRelease)
 	Expect(err).NotTo(HaveOccurred())

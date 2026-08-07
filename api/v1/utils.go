@@ -149,7 +149,7 @@ func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, rel
 	}, true, nil
 }
 
-func decodeHelmReleaseValues(data []byte) (map[string]interface{}, error) {
+func decodeHelmReleaseValues(data []byte) (map[string]any, error) {
 	decoded, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to base64 decode: %w", err)
@@ -167,7 +167,7 @@ func decodeHelmReleaseValues(data []byte) (map[string]interface{}, error) {
 	}
 
 	var release struct {
-		Config map[string]interface{} `json:"config"`
+		Config map[string]any `json:"config"`
 	}
 	if err := json.Unmarshal(decompressed, &release); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal release JSON: %w", err)
