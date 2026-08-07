@@ -1,6 +1,6 @@
 module github.com/cloudoperators/owner-label-injector
 
-go 1.24.0
+go 1.26
 
 require (
 	github.com/evanphx/json-patch v0.5.2
