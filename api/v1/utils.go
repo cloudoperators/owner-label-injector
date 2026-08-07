@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudoperators/owner-label-injector/internal/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 )
 
 const HelmLabelKey = "app.kubernetes.io/managed-by"
@@ -88,8 +89,8 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 }
 
 const HelmReleaseSecretDatasource = "helm-release-secret"
-const HelmReleaseSecretPrefix = "sh.helm.release.v1."
-const HelmReleaseSecretType = "helm.sh/release.v1"
+const HelmReleaseSecretPrefix = "sh.helm.release.v1." //nolint:gosec // false positive; this value is not a secret
+const HelmReleaseSecretType = "helm.sh/release.v1"    //nolint:gosec // false positive; this value is not a secret
 
 func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, releaseName, releaseNamespace string) (OwnerData, bool, error) {
 	secretList := &corev1.SecretList{}
@@ -139,7 +140,7 @@ func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, rel
 
 	ownedBy, found, err := unstructured.NestedString(values, "global", "greenhouse", "ownedBy")
 	if err != nil || !found || ownedBy == "" {
-		return OwnerData{}, false, nil
+		return OwnerData{}, false, nil //nolint:nilerr // discarding of non-nil error is intentional, false is returned instead
 	}
 
 	return OwnerData{
