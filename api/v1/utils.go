@@ -51,24 +51,24 @@ func IsManagedByHelm(labels, annotations map[string]string) (isManagedByHelm boo
 }
 
 func GetOwnerDataFromLabels(labels map[string]string, cfg *config.Global) (bool, OwnerData) {
-	supportGroup, ok := labels[cfg.Labels.SupportGroupKey()]
+	supportGroup, ok := labels[cfg.SupportGroupKey()]
 	if !ok {
 		return false, OwnerData{}
 	}
 
-	return true, OwnerData{SupportGroup: supportGroup, Service: labels[cfg.Labels.ServiceKey()]}
+	return true, OwnerData{SupportGroup: supportGroup, Service: labels[cfg.ServiceKey()]}
 }
 
 const OwnerConfigmapDatasource = "owner-info"
 
 func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, releaseName, releaseNamespace string) (OwnerData, bool, error) {
 	cm := &corev1.ConfigMap{}
-	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapPrefix + releaseName}, cm)
+	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.OwnerConfigMapPrefix + releaseName}, cm)
 
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// try the configmap deployed with helm hooks
-			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapFallbackPrefix + releaseName}, cm)
+			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.OwnerConfigMapFallbackPrefix + releaseName}, cm)
 			if k8serrors.IsNotFound(err) {
 				return OwnerData{}, false, nil
 			}
@@ -77,8 +77,8 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 		return OwnerData{}, false, err
 	}
 
-	supportGroup, supportGroupOK := cm.Data[cfg.Helm.SupportGroupDataKey]
-	service := cm.Data[cfg.Helm.ServiceDataKey]
+	supportGroup, supportGroupOK := cm.Data[cfg.SupportGroupDataKey]
+	service := cm.Data[cfg.ServiceDataKey]
 
 	if !supportGroupOK {
 		return OwnerData{}, false, fmt.Errorf("missing data in owner config map: %s, namespace: %s", cm.Name, cm.Namespace)
@@ -259,8 +259,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 		}
 
 		// Check static rules from environment variables.
-		if len(cfg.StaticRules.Rules) > 0 {
-			found, staticMatch := cfg.StaticRules.Check(release, releaseNamespace)
+		if len(cfg.Rules) > 0 {
+			found, staticMatch := cfg.Check(release, releaseNamespace)
 			if found {
 				return OwnerData{
 					SupportGroup: staticMatch.SupportGroup,
@@ -283,8 +283,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 
 		// SPECIAL CASE 1: TLS certs
 		// annotation: vice-president/claimed-by-ingress
-		if annotations != nil && annotations[cfg.Traversal.VicePresidentAnnotationKey] != "" {
-			ingress := annotations[cfg.Traversal.VicePresidentAnnotationKey]
+		if annotations != nil && annotations[cfg.VicePresidentAnnotationKey] != "" {
+			ingress := annotations[cfg.VicePresidentAnnotationKey]
 			ingressData := strings.Split(ingress, "/")
 
 			if len(ingressData) == 2 {
@@ -296,8 +296,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 		}
 
 		// SPECIAL CASE 2: early-owner-info-owner-of-X configmap
-		if strings.HasPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix) && object.GetKind() == "ConfigMap" {
-			release := strings.TrimPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix)
+		if strings.HasPrefix(object.GetName(), cfg.OwnerConfigMapFallbackPrefix) && object.GetKind() == "ConfigMap" {
+			release := strings.TrimPrefix(object.GetName(), cfg.OwnerConfigMapFallbackPrefix)
 			ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, cfg, release, namespace)
 			if found {
 				return ownerDataFromOwnerConfigmap, true, nil

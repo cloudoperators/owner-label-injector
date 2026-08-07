@@ -79,9 +79,9 @@ func (a *GenericLabeller) Handle(ctx context.Context, req admission.Request) adm
 	// Set annotation for the datasource
 	currentAnnotations := object.GetAnnotations()
 	if currentAnnotations != nil {
-		currentAnnotations[a.Config.Labels.DataSourceAnnotation()] = ownerData.DataSource
+		currentAnnotations[a.Config.DataSourceAnnotation()] = ownerData.DataSource
 	} else {
-		currentAnnotations = map[string]string{a.Config.Labels.DataSourceAnnotation(): ownerData.DataSource}
+		currentAnnotations = map[string]string{a.Config.DataSourceAnnotation(): ownerData.DataSource}
 	}
 	object.SetAnnotations(currentAnnotations)
 
@@ -104,11 +104,11 @@ func (o OwnerData) Labels(cfg *config.Global) map[string]string {
 	labels := make(map[string]string, 0)
 
 	if o.SupportGroup != "" {
-		labels[cfg.Labels.SupportGroupKey()] = o.SupportGroup
+		labels[cfg.SupportGroupKey()] = o.SupportGroup
 	}
 
 	if o.Service != "" {
-		labels[cfg.Labels.ServiceKey()] = o.Service
+		labels[cfg.ServiceKey()] = o.Service
 	}
 
 	return labels
