@@ -273,13 +273,13 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, gvr sche
 		fmt.Printf("%s labels before: %+v \n", logHeader, currentLabels)
 		globalConfig := config.Get()
 		// delete(currentLabels, globalConfig.Labels.ServiceKey())
-		delete(currentLabels, globalConfig.Labels.SupportGroupKey())
+		delete(currentLabels, globalConfig.SupportGroupKey())
 		newResource.SetLabels(currentLabels)
 		fmt.Printf("%s labels after: %+v \n", logHeader, currentLabels)
 
 		// clean annotation
 		currentAnnotations := resource.GetAnnotations()
-		delete(currentAnnotations, globalConfig.Labels.DataSourceAnnotation())
+		delete(currentAnnotations, globalConfig.DataSourceAnnotation())
 		newResource.SetAnnotations(currentAnnotations)
 
 		if DryRun {
@@ -350,7 +350,7 @@ func GetResourcesWithSpecificLabel(ctx context.Context, dynamicInt dynamic.Inter
 	listOptions := metav1.ListOptions{}
 	if SupportGroupToBeRemoved != "" {
 		globalConfig := config.Get()
-		labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{globalConfig.Labels.SupportGroupKey(): SupportGroupToBeRemoved}}
+		labelSelector := metav1.LabelSelector{MatchLabels: map[string]string{globalConfig.SupportGroupKey(): SupportGroupToBeRemoved}}
 		listOptions.LabelSelector = labels.Set(labelSelector.MatchLabels).String()
 	}
 

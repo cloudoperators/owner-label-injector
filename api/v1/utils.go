@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/cloudoperators/owner-label-injector/internal/config"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
@@ -26,6 +25,8 @@ import (
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/cloudoperators/owner-label-injector/internal/config"
 )
 
 const HelmLabelKey = "app.kubernetes.io/managed-by"
@@ -51,24 +52,24 @@ func IsManagedByHelm(labels, annotations map[string]string) (isManagedByHelm boo
 }
 
 func GetOwnerDataFromLabels(labels map[string]string, cfg *config.Global) (bool, OwnerData) {
-	supportGroup, ok := labels[cfg.Labels.SupportGroupKey()]
+	supportGroup, ok := labels[cfg.SupportGroupKey()]
 	if !ok {
 		return false, OwnerData{}
 	}
 
-	return true, OwnerData{SupportGroup: supportGroup, Service: labels[cfg.Labels.ServiceKey()]}
+	return true, OwnerData{SupportGroup: supportGroup, Service: labels[cfg.ServiceKey()]}
 }
 
 const OwnerConfigmapDatasource = "owner-info"
 
 func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, releaseName, releaseNamespace string) (OwnerData, bool, error) {
 	cm := &corev1.ConfigMap{}
-	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapPrefix + releaseName}, cm)
+	err := c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.OwnerConfigMapPrefix + releaseName}, cm)
 
 	if err != nil {
 		if k8serrors.IsNotFound(err) {
 			// try the configmap deployed with helm hooks
-			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.Helm.OwnerConfigMapFallbackPrefix + releaseName}, cm)
+			err = c.Get(context.TODO(), types.NamespacedName{Namespace: releaseNamespace, Name: cfg.OwnerConfigMapFallbackPrefix + releaseName}, cm)
 			if k8serrors.IsNotFound(err) {
 				return OwnerData{}, false, nil
 			}
@@ -77,8 +78,8 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 		return OwnerData{}, false, err
 	}
 
-	supportGroup, supportGroupOK := cm.Data[cfg.Helm.SupportGroupDataKey]
-	service := cm.Data[cfg.Helm.ServiceDataKey]
+	supportGroup, supportGroupOK := cm.Data[cfg.SupportGroupDataKey]
+	service := cm.Data[cfg.ServiceDataKey]
 
 	if !supportGroupOK {
 		return OwnerData{}, false, fmt.Errorf("missing data in owner config map: %s, namespace: %s", cm.Name, cm.Namespace)
@@ -88,8 +89,8 @@ func GetOwnerDataFromOwnerConfigmap(c client.Client, cfg *config.Global, release
 }
 
 const HelmReleaseSecretDatasource = "helm-release-secret"
-const HelmReleaseSecretPrefix = "sh.helm.release.v1."
-const HelmReleaseSecretType = "helm.sh/release.v1"
+const HelmReleaseSecretPrefix = "sh.helm.release.v1." //nolint:gosec // false positive; this value is not a secret
+const HelmReleaseSecretType = "helm.sh/release.v1"    //nolint:gosec // false positive; this value is not a secret
 
 func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, releaseName, releaseNamespace string) (OwnerData, bool, error) {
 	secretList := &corev1.SecretList{}
@@ -139,7 +140,7 @@ func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, rel
 
 	ownedBy, found, err := unstructured.NestedString(values, "global", "greenhouse", "ownedBy")
 	if err != nil || !found || ownedBy == "" {
-		return OwnerData{}, false, nil
+		return OwnerData{}, false, nil //nolint:nilerr // discarding of non-nil error is intentional, false is returned instead
 	}
 
 	return OwnerData{
@@ -149,7 +150,7 @@ func GetOwnerDataFromHelmReleaseSecret(ctx context.Context, c client.Client, rel
 	}, true, nil
 }
 
-func decodeHelmReleaseValues(data []byte) (map[string]interface{}, error) {
+func decodeHelmReleaseValues(data []byte) (map[string]any, error) {
 	decoded, err := base64.StdEncoding.DecodeString(string(data))
 	if err != nil {
 		return nil, fmt.Errorf("failed to base64 decode: %w", err)
@@ -167,7 +168,7 @@ func decodeHelmReleaseValues(data []byte) (map[string]interface{}, error) {
 	}
 
 	var release struct {
-		Config map[string]interface{} `json:"config"`
+		Config map[string]any `json:"config"`
 	}
 	if err := json.Unmarshal(decompressed, &release); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal release JSON: %w", err)
@@ -259,8 +260,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 		}
 
 		// Check static rules from environment variables.
-		if len(cfg.StaticRules.Rules) > 0 {
-			found, staticMatch := cfg.StaticRules.Check(release, releaseNamespace)
+		if len(cfg.Rules) > 0 {
+			found, staticMatch := cfg.Check(release, releaseNamespace)
 			if found {
 				return OwnerData{
 					SupportGroup: staticMatch.SupportGroup,
@@ -283,8 +284,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 
 		// SPECIAL CASE 1: TLS certs
 		// annotation: vice-president/claimed-by-ingress
-		if annotations != nil && annotations[cfg.Traversal.VicePresidentAnnotationKey] != "" {
-			ingress := annotations[cfg.Traversal.VicePresidentAnnotationKey]
+		if annotations != nil && annotations[cfg.VicePresidentAnnotationKey] != "" {
+			ingress := annotations[cfg.VicePresidentAnnotationKey]
 			ingressData := strings.Split(ingress, "/")
 
 			if len(ingressData) == 2 {
@@ -296,8 +297,8 @@ func UpwardTraverseGetOwnerData(ctx context.Context, k8sClient client.Client, cf
 		}
 
 		// SPECIAL CASE 2: early-owner-info-owner-of-X configmap
-		if strings.HasPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix) && object.GetKind() == "ConfigMap" {
-			release := strings.TrimPrefix(object.GetName(), cfg.Helm.OwnerConfigMapFallbackPrefix)
+		if strings.HasPrefix(object.GetName(), cfg.OwnerConfigMapFallbackPrefix) && object.GetKind() == "ConfigMap" {
+			release := strings.TrimPrefix(object.GetName(), cfg.OwnerConfigMapFallbackPrefix)
 			ownerDataFromOwnerConfigmap, found, err := GetOwnerDataFromOwnerConfigmap(k8sClient, cfg, release, namespace)
 			if found {
 				return ownerDataFromOwnerConfigmap, true, nil

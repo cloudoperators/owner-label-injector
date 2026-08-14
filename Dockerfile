@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: 2025 SAP SE or an SAP affiliate company
 # SPDX-License-Identifier: Apache-2.0
 
-FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.25.1 as builder
+FROM --platform=${BUILDPLATFORM:-linux/amd64} golang:1.26.5 as builder
 
 ARG TARGETOS
 ARG TARGETARCH

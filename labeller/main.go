@@ -126,10 +126,10 @@ func main() {
 	fmt.Println("Dry run:		", DryRun)
 	fmt.Println()
 	fmt.Println("Config from env vars:")
-	fmt.Printf("  Support Group Label:\t%s\n", globalConfig.Labels.SupportGroupKey())
-	fmt.Printf("  Service Label:\t%s\n", globalConfig.Labels.ServiceKey())
-	fmt.Printf("  Data Source Annotation:\t%s\n", globalConfig.Labels.DataSourceAnnotation())
-	fmt.Printf("  Static Rules:\t\t%d configured\n", len(globalConfig.StaticRules.Rules))
+	fmt.Printf("  Support Group Label:\t%s\n", globalConfig.SupportGroupKey())
+	fmt.Printf("  Service Label:\t%s\n", globalConfig.ServiceKey())
+	fmt.Printf("  Data Source Annotation:\t%s\n", globalConfig.DataSourceAnnotation())
+	fmt.Printf("  Static Rules:\t\t%d configured\n", len(globalConfig.Rules))
 
 	if NamespacesFlag == "all" {
 		fmt.Println("Namespaces:		 all")
@@ -247,8 +247,8 @@ func countWithoutOwnerLabels(resources []unstructured.Unstructured) int {
 			count++
 			continue
 		}
-		_, hasGroup := labels[globalConfig.Labels.SupportGroupKey()]
-		_, hasService := labels[globalConfig.Labels.ServiceKey()]
+		_, hasGroup := labels[globalConfig.SupportGroupKey()]
+		_, hasService := labels[globalConfig.ServiceKey()]
 		if !hasGroup || !hasService {
 			count++
 		}
@@ -290,7 +290,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 		if currentAnnotations == nil {
 			currentAnnotations = make(map[string]string)
 		}
-		existingDataSource, hasExistingDataSource := currentAnnotations[globalConfig.Labels.DataSourceAnnotation()]
+		existingDataSource, hasExistingDataSource := currentAnnotations[globalConfig.DataSourceAnnotation()]
 
 		// Only overwrite labels if DataSource is non‐empty and different
 		if hasExistingDataSource && existingDataSource != "" && existingDataSource != ownerData.DataSource {
@@ -328,7 +328,7 @@ func handleResources(ctx context.Context, dynamicInt dynamic.Interface, k8sClien
 		fmt.Printf("%s Labels updated to: %+v \n", logHeader, currentLabels)
 
 		// Update annotations
-		currentAnnotations[globalConfig.Labels.DataSourceAnnotation()] = ownerData.DataSource
+		currentAnnotations[globalConfig.DataSourceAnnotation()] = ownerData.DataSource
 		newResource.SetAnnotations(currentAnnotations)
 
 		if DryRun {
